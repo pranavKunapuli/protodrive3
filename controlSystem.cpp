@@ -13,7 +13,7 @@ Ticker encoderTicker;
 float ticketInterval = 0.025f;
 float drivePulsewidth;
 float loadPulsewidth;
-float accelerationFactor = 0.4f;
+float accelerationFactor = 0.25f;
 
 AnalogIn batteryVoltage(p15);
 AnalogIn batteryRefVoltage(p16);
@@ -58,7 +58,7 @@ void encoderRPMCalculator() {
 	float circumfrence = 2 * 3.1415 * wheelRadius;
 	float inchesPerMinute = encoderFrequency * circumfrence;
 	float inchesPerHour = inchesPerMinute * 60;
-	milesPerHour = ((inchesPerHour / 12) / 5280);
+	currentMPH = ((inchesPerHour / 12) / 5280);
 }
 
 void setBatteryVoltage() {
