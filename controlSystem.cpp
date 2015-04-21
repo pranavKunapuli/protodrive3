@@ -79,7 +79,10 @@ void sendLoadSignal() {
 }
 
 void calculateTargetPulsewidth() {
-
+	float desiredInchesPerHour = desiredMPH * 5280 * 12;
+	float desiredInchesPerMinute = desiredInchesPerHour / 60;
+	float desiredFrequency = desiredInchesPerMinute / 160;
+	targetPulsewidth = desiredFrequency / 840;
 }
 
 void speedPIDController(int drive) {
