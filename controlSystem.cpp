@@ -68,7 +68,17 @@ void setBatteryVoltage() {
 void calculateBatteryCurrent() {
 	setBatteryVoltage();
 	currentBatteryCurrent = (currentBatteryVoltage - 
-		(batteryVoltage.read() * 11)) / 0.01;
+		(batteryVoltage.read() * 11)) / 6.9;
+}
+
+void setSuperCapVoltage() {
+	currentSuperCapVoltage = superCapRefVoltage.read() * 11;
+}
+
+void calculateSuperCapCurrent() {
+	setSuperCapVoltage();
+	currentSuperCapCurrent = (currentSuperCapVoltage -
+		(superCapVoltage.read() * 11)) / 6.9;
 }
 
 void sendDriveSignal() {
@@ -138,7 +148,8 @@ int main()
     encoderTicker.attach(&encoderRPMCalculator, tickerInterval);
 
     /* Initialize battery information ticker */
-    batteryStats.attach(&calculateBatteryCurrent, circuitStatInterval)
+    batteryStats.attach(&calculateBatteryCurrent, circuitStatInterval);
+    superCapStats.attach(&calculateSuperCapCurrent, circuitStatInterval);
 
     while(1) {
         
