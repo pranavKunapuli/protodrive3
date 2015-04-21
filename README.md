@@ -1,2 +1,5 @@
 # protodrive3
+
 This is the github repository for ProtoDrive 3.0. Please see our blog at protodrive3.blogspot.com
+
+In the past, electric vehicle power system control software has been solely tested using software simulations rather than hardware. While the software may pass certain simulation tests, once the car is fully developed and the system implemented with hardware, engineers may find that the simulations do not emulate the real-world conditions of the car. Such realizations then call for expensive and time consuming changes to the car. The ProtoDrive project aims to provide a physical platform on which control software can be tested prior to full-scale implementation in electric vehicle drive trains. The project has been attempted in the past, but there have been several shortcomings and areas for improvement. Our primary motivation for attempting this project is to recreate the ProtoDrive from scratch and to successfully link the super capacitor into the system so that it charges and discharges on command.
