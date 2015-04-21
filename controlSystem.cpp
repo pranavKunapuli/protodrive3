@@ -10,10 +10,11 @@ PwmOut loadMotor(p23);
 DigitalOut loadControl(p5);
 InterruptIn encoder(p6);
 Ticker encoderTicker;
-float ticketInterval = 0.025f;
+float tickerInterval = 0.025f;
 float drivePulsewidth;
 float loadPulsewidth;
 float accelerationFactor = 0.25f;
+Ticker speedPIDTicker;
 
 AnalogIn batteryVoltage(p15);
 AnalogIn batteryRefVoltage(p16);
@@ -45,7 +46,7 @@ float currentSuperCapCurrent;
  * time period.
  */
 void encoderRise() {
-	encoderHighCount++;
+    encoderHighCount++;
 }
 
 /*
@@ -54,85 +55,67 @@ void encoderRise() {
  * a pre-specified wheel radius
  */
 void encoderRPMCalculator() {
-	encoderFrequency = encoderHighCount / ticketInterval;
-	float circumfrence = 2 * 3.1415 * wheelRadius;
-	float inchesPerMinute = encoderFrequency * circumfrence;
-	float inchesPerHour = inchesPerMinute * 60;
-	currentMPH = ((inchesPerHour / 12) / 5280);
+    encoderFrequency = encoderHighCount / tickerInterval;
+    float circumfrence = 2 * 3.1415 * wheelRadius;
+    float inchesPerMinute = encoderFrequency * circumfrence;
+    float inchesPerHour = inchesPerMinute * 60;
+    currentMPH = ((inchesPerHour / 12) / 5280);
 }
 
 void setBatteryVoltage() {
-	currentBatteryVoltage = batteryRefVoltage.read() * 11;
+    currentBatteryVoltage = batteryRefVoltage.read() * 11;
 }
 
 void calculateBatteryCurrent() {
-	setBatteryVoltage();
-	currentBatteryCurrent = (currentBatteryVoltage - 
-		(batteryVoltage.read() * 11)) / 6.9;
+    setBatteryVoltage();
+    currentBatteryCurrent = (currentBatteryVoltage - 
+        (batteryVoltage.read() * 11)) / 6.9;
 }
 
 void setSuperCapVoltage() {
-	currentSuperCapVoltage = superCapRefVoltage.read() * 11;
+    currentSuperCapVoltage = superCapRefVoltage.read() * 11;
 }
 
 void calculateSuperCapCurrent() {
-	setSuperCapVoltage();
-	currentSuperCapCurrent = (currentSuperCapVoltage -
-		(superCapVoltage.read() * 11)) / 6.9;
+    setSuperCapVoltage();
+    currentSuperCapCurrent = (currentSuperCapVoltage -
+        (superCapVoltage.read() * 11)) / 6.9;
 }
 
 void sendDriveSignal() {
-	driveMotor.write(drivePulsewidth);
+    driveMotor.write(drivePulsewidth);
 }
 void sendLoadSignal() {
-	loadMotor.write(loadPulsewidth);
+    loadMotor.write(loadPulsewidth);
 }
 
 void calculateTargetPulsewidth() {
-	float desiredInchesPerHour = desiredMPH * 5280 * 12;
-	float desiredInchesPerMinute = desiredInchesPerHour / 60;
-	float desiredFrequency = desiredInchesPerMinute / 160;
-	targetPulsewidth = desiredFrequency / 840;
+    float desiredInchesPerHour = targetMPH * 5280 * 12;
+    float desiredInchesPerMinute = desiredInchesPerHour / 60;
+    float desiredFrequency = desiredInchesPerMinute / 160;
+    targetPulsewidth = desiredFrequency / 840;
 }
 
-void speedPIDController(int drive) {
-	float speedDifference = desiredMPH - currentMPH;
-	calculateTargetPulsewidth();
-	float pulsewidthDiff;
+void speedPIDController() {
+    float speedDifference = targetMPH - currentMPH;
+    calculateTargetPulsewidth();
+    float pulsewidthDiff;
 
-	if(speedDifference > 0) {
-		if(drive) {
-			pulsewidthDiff = targetPulsewidth - drivePulsewidth;
-			if(pulsewidthDiff < 0.15f) {
-				drivePulsewidth = targetPulsewidth;
-			} else {
-				drivePulsewidth += pulsewidthDiff * accelerationFactor;
-			}
-		} else {
-			pulsewidthDiff = targetPulsewidth - loadPulsewidth;
-			if(pulsewidthDiff < 0.15f) {
-				loadPulsewidth = targetPulsewidth;
-			} else {
-				loadPulsewidth += pulsewidthDiff * accelerationFactor;
-			}
-		}
-	} else if (speedDifference < 0) {
-		if(drive) {
-			pulsewidthDiff = drivePulsewidth - targetPulsewidth;
-			if(pulsewidthDiff < 0.15f) {
-				drivePulsewidth = targetPulsewidth;
-			} else {
-				drivePulsewidth -= pulsewidthDiff * accelerationFactor;
-			}
-		} else {
-			pulsewidthDiff = loadPulsewidth - targetPulsewidth;
-			if(pulsewidthDiff < 0.15f) {
-				loadPulsewidth = targetPulsewidth;
-			} else {
-				loadPulsewidth -= pulsewidthDiff * accelerationFactor;
-			}
-		}
-	}
+    if(speedDifference > 0) {
+        pulsewidthDiff = targetPulsewidth - drivePulsewidth;
+        if(pulsewidthDiff < 0.15f) {
+            drivePulsewidth = targetPulsewidth;
+        } else {
+            drivePulsewidth += pulsewidthDiff * accelerationFactor;
+        }
+    } else if (speedDifference < 0) {
+        pulsewidthDiff = drivePulsewidth - targetPulsewidth;
+        if(pulsewidthDiff < 0.15f) {
+            drivePulsewidth = targetPulsewidth;
+        } else {
+            drivePulsewidth -= pulsewidthDiff * accelerationFactor;
+        }
+    }
 }
 
 int main()
@@ -143,13 +126,26 @@ int main()
     driveMotor.write(0.0f); // Initialize to low
     loadMotor.write(0.0f); // Initialize to low
 
-    /* Initialize encoder ticker and interrupt */
-    encoder.rise(&encoderRise());
+    /* Initialize speed/encoder ticker and interrupt */
+    encoder.rise(&encoderRise);
     encoderTicker.attach(&encoderRPMCalculator, tickerInterval);
+    speedPIDTicker.attach(&speedPIDController, tickerInterval);
 
     /* Initialize battery information ticker */
     batteryStats.attach(&calculateBatteryCurrent, circuitStatInterval);
     superCapStats.attach(&calculateSuperCapCurrent, circuitStatInterval);
+    
+    encoderHighCount = 0; // How fast the wheels are spinning
+    encoderFrequency = 0;
+    currentMPH = 0;
+    targetMPH = 0;
+    targetPulsewidth = 0;
+    currentBatteryVoltage = 0;
+    currentSuperCapVoltage = 0;
+    currentBatteryCurrent = 0;
+    currentSuperCapCurrent = 0;
+    drivePulsewidth = 0;
+    loadPulsewidth = 0;
 
     while(1) {
         
