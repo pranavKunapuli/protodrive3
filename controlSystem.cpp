@@ -9,11 +9,11 @@ PwmOut driveMotor(p24);
 PwmOut loadMotor(p23);
 DigitalOut loadControl(p5);
 InterruptIn encoder(p6);
-Ticker encoderTicker;
+Timer encoderTimer;
 float tickerInterval = 0.025f;
 float drivePulsewidth;
 float loadPulsewidth;
-float accelerationFactor = 0.25f;
+float accelerationFactor = 0.4f;
 Ticker speedPIDTicker;
 
 AnalogIn batteryVoltage(p15);
@@ -22,9 +22,10 @@ AnalogIn superCapVoltage(p17);
 AnalogIn superCapRefVoltage(p18);
 Ticker batteryStats;
 Ticker superCapStats;
-float circuitStatInterval = 0.025f;
+float circuitStatInterval = 0.020f;
 
-float wheelRadius = 25.6; // Assuming a wheel radius of 25.6 inches
+float wheelRadius = 25.6f; // Assuming a wheel radius of 25.6 inches
+float wheelCircumfrence = 160.85f;
 
 PwmOut buckPWM(p22);
 PwmOut boostPWM(p21);
@@ -40,27 +41,7 @@ float currentSuperCapVoltage;
 float currentBatteryCurrent;
 float currentSuperCapCurrent;
 
-/*
- * Triggers every time we get a rising edge
- * and counts the number of triggers in a given
- * time period.
- */
-void encoderRise() {
-    encoderHighCount++;
-}
-
-/*
- * Uses the number of high triggers from the encoder signal
- * and calculates the speed in miles per hour according to 
- * a pre-specified wheel radius
- */
-void encoderRPMCalculator() {
-    encoderFrequency = encoderHighCount / tickerInterval;
-    float circumfrence = 2 * 3.1415 * wheelRadius;
-    float inchesPerMinute = encoderFrequency * circumfrence;
-    float inchesPerHour = inchesPerMinute * 60;
-    currentMPH = ((inchesPerHour / 12) / 5280);
-}
+Serial pc(USBTX, USBRX);
 
 void setBatteryVoltage() {
     currentBatteryVoltage = batteryRefVoltage.read() * 11;
@@ -82,6 +63,18 @@ void calculateSuperCapCurrent() {
         (superCapVoltage.read() * 11)) / 6.9;
 }
 
+/*
+ * **************** Motor Control Methods *****************
+ */
+
+void encoderRise() {
+    float timePassed = encoderTimer.read();
+    encoderFrequency = 1 / timePassed;
+    pc.printf("Time Passed: %f\r\n", timePassed);
+    pc.printf("Frequency: %f\r\n", encoderFrequency);
+    encoderTimer.reset();
+}
+ 
 void sendDriveSignal() {
     driveMotor.write(drivePulsewidth);
 }
@@ -92,62 +85,99 @@ void sendLoadSignal() {
 void calculateTargetPulsewidth() {
     float desiredInchesPerHour = targetMPH * 5280 * 12;
     float desiredInchesPerMinute = desiredInchesPerHour / 60;
-    float desiredFrequency = desiredInchesPerMinute / 160;
-    targetPulsewidth = desiredFrequency / 840;
+    float desiredFrequency = desiredInchesPerMinute / wheelCircumfrence;
+    targetPulsewidth = desiredFrequency / 1129;
+}
+
+void updateCurrentMPH() {
+    float frequency = 1129 * drivePulsewidth;
+    float inchesPerMinute = frequency * wheelCircumfrence;
+    float inchesPerHour = inchesPerMinute * 60;
+    currentMPH = ((inchesPerHour / 12) / 5280);
 }
 
 void speedPIDController() {
     float speedDifference = targetMPH - currentMPH;
-    calculateTargetPulsewidth();
     float pulsewidthDiff;
 
     if(speedDifference > 0) {
         pulsewidthDiff = targetPulsewidth - drivePulsewidth;
-        if(pulsewidthDiff < 0.15f) {
+        if(pulsewidthDiff < 0.05f) {
             drivePulsewidth = targetPulsewidth;
         } else {
             drivePulsewidth += pulsewidthDiff * accelerationFactor;
         }
     } else if (speedDifference < 0) {
         pulsewidthDiff = drivePulsewidth - targetPulsewidth;
-        if(pulsewidthDiff < 0.15f) {
+        if(pulsewidthDiff < 0.05f) {
             drivePulsewidth = targetPulsewidth;
         } else {
             drivePulsewidth -= pulsewidthDiff * accelerationFactor;
         }
     }
+    
+    sendDriveSignal(); // Push the changed pulsewidth to the motor
+    updateCurrentMPH();
+    pc.printf("Current MPH: %f\r\n", currentMPH);
+    pc.printf("Target MPH: %f\r\n", targetMPH);
+    pc.printf("Target PW: %f\r\n", targetPulsewidth);
+    pc.printf("Current PW: %f\r\n", drivePulsewidth);
 }
+
+/*
+ * *************** Main Function ***************
+ */
 
 int main()
 {
-    boostPWM.period(0.001f); // Set period for all PWMs to 1 ms
-    boostPWM.write(0.0f); // Initialize to low
-    buckPWM.write(0.0f); // Initialize to low
-    driveMotor.write(0.0f); // Initialize to low
-    loadMotor.write(0.0f); // Initialize to low
-
-    /* Initialize speed/encoder ticker and interrupt */
-    encoder.rise(&encoderRise);
-    encoderTicker.attach(&encoderRPMCalculator, tickerInterval);
-    speedPIDTicker.attach(&speedPIDController, tickerInterval);
-
-    /* Initialize battery information ticker */
-    batteryStats.attach(&calculateBatteryCurrent, circuitStatInterval);
-    superCapStats.attach(&calculateSuperCapCurrent, circuitStatInterval);
-    
+    /* Initialize global variables */
     encoderHighCount = 0; // How fast the wheels are spinning
     encoderFrequency = 0;
-    currentMPH = 0;
-    targetMPH = 0;
+    currentMPH = 86;
+    targetMPH = 86;
     targetPulsewidth = 0;
     currentBatteryVoltage = 0;
     currentSuperCapVoltage = 0;
     currentBatteryCurrent = 0;
     currentSuperCapCurrent = 0;
-    drivePulsewidth = 0;
-    loadPulsewidth = 0;
+    drivePulsewidth = 0.50f;
+    loadPulsewidth = 0.5f;
+   
+    /* Initialize PWM global period and individual pulsewidths */
+    boostPWM.period(0.001f); // Set period for all PWMs to 1 ms
+    boostPWM.write(0.0f); // Initialize to low
+    buckPWM.write(0.0f); // Initialize to low
+    sendDriveSignal();
+    sendLoadSignal();
+
+    /* Initialize speed/encoder ticker and interrupt */
+    //encoder.rise(&encoderRise);
+    //encoderTimer.start();
+    //speedPIDTicker.attach(&speedPIDController, 0.6f);
+
+    /* Initialize battery information ticker */
+    batteryStats.attach(&calculateBatteryCurrent, circuitStatInterval);
+    superCapStats.attach(&calculateSuperCapCurrent, circuitStatInterval);
 
     while(1) {
+        calculateTargetPulsewidth();
+        updateCurrentMPH();
         
+        /*
+        // Buck-Boost conditions based on battery current
+        if(currentBatteryCurrent < 0) {
+            buck.write(0.25f);
+        } else if(currentBatteryCurrent > 0.15f) {
+            boost.write(0.25f);
+        } else {
+            buck.write(0.0f);
+            boost.write(0.0f);
+        }
+        
+        // Buck-Boost conditions based on load
+        if(!loadControl) {
+            buck.write(loadPulsewidth / 5);
+        }
+        */
     }
 }
