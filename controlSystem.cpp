@@ -8,7 +8,7 @@
 PwmOut driveMotor(p24);
 PwmOut loadMotor(p23);
 DigitalOut loadControl(p5);
-InterruptIn encoder(p6);
+AnalogIn encoder(p20);
 Timer encoderTimer;
 float tickerInterval = 0.025f;
 float drivePulsewidth;
@@ -70,8 +70,10 @@ void calculateSuperCapCurrent() {
 void encoderRise() {
     float timePassed = encoderTimer.read();
     encoderFrequency = 1 / timePassed;
-    pc.printf("Time Passed: %f\r\n", timePassed);
-    pc.printf("Frequency: %f\r\n", encoderFrequency);
+    if(encoderFrequency < 1000) {
+        pc.printf("Time Passed: %f\r\n", timePassed);
+        pc.printf("Frequency: %f\r\n", encoderFrequency);
+    }
     encoderTimer.reset();
 }
  
@@ -152,17 +154,42 @@ int main()
 
     /* Initialize speed/encoder ticker and interrupt */
     //encoder.rise(&encoderRise);
-    //encoderTimer.start();
+    encoderTimer.start();
     //speedPIDTicker.attach(&speedPIDController, 0.6f);
 
     /* Initialize battery information ticker */
     batteryStats.attach(&calculateBatteryCurrent, circuitStatInterval);
     superCapStats.attach(&calculateSuperCapCurrent, circuitStatInterval);
+    
+    int readyToRead = 1;
+    int readCount = 0;
+    
+    pc.printf("Initialized all variables\r\n");
 
     while(1) {
         calculateTargetPulsewidth();
         updateCurrentMPH();
+        float encoderVoltage = encoder.read() * 3.3;
         
+        if(readyToRead && encoderVoltage > 2) {
+            readCount++;
+            float timePassed = encoderTimer.read();
+            float tempFreq = 1 / timePassed;
+            if(tempFreq < 800.0f) {
+                encoderFrequency = ((encoderFrequency * (readCount - 1)) + tempFreq) / readCount;
+                pc.printf("Frequency: %f\r\n", encoderFrequency);
+            } else {
+                pc.printf("Error\r\n");
+            }
+            encoderTimer.reset();
+            readyToRead = 0;
+        } else if(!readyToRead && encoderVoltage < 0.8) {
+            readyToRead = 1;
+        }
+        
+        //pc.printf("printing");
+        
+        //pc.printf("Encoder Voltage: %f\r\n", encoderVoltage);
         /*
         // Buck-Boost conditions based on battery current
         if(currentBatteryCurrent < 0) {

@@ -75,9 +75,4 @@ int main() {
             
         loadMotor.write(loadDuty);
     }
-    
-    pc.printf("Max: %f\r\n", max);
-    pc.printf("Min: %f\r\n", min);
-    risingEdge();
-    pc.printf("Final freq: %f\r\n", loadEncoderValue);
 }
