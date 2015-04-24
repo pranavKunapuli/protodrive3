@@ -15,6 +15,10 @@ float drivePulsewidth;
 float loadPulsewidth;
 float accelerationFactor = 0.4f;
 Ticker speedPIDTicker;
+Ticker loadSimulation;
+float loadPWMValues [9] = {0.0f, 0.1f, 0.1f, 0.1f, 0.0f, 0.1f, 0.1f, 0.1f, 0.0f}; // Pulsewidths for load motor
+int loadControlValues [9] = {0, 0, 0, 0, 0, 1, 1, 1, 1}; // 0 ==> Oppose drive motor | 1 ==> Assist load motor
+int loadTickerIndex;
 
 AnalogIn batteryVoltage(p15);
 AnalogIn batteryRefVoltage(p16);
@@ -66,6 +70,13 @@ void calculateSuperCapCurrent() {
 /*
  * **************** Motor Control Methods *****************
  */
+
+void loadTicker() {
+    loadPulsewidth = loadPWMValues[loadTickerIndex];
+    loadControl = loadControlValues[loadTickerIndex];
+    loadTickerIndex++;
+    sendLoadSignal();
+}
 
 void encoderRise() {
     float timePassed = encoderTimer.read();
@@ -143,7 +154,8 @@ int main()
     currentBatteryCurrent = 0;
     currentSuperCapCurrent = 0;
     drivePulsewidth = 0.50f;
-    loadPulsewidth = 0.5f;
+    loadPulsewidth = 0.1f;
+    loadTickerIndex = 0;
    
     /* Initialize PWM global period and individual pulsewidths */
     boostPWM.period(0.001f); // Set period for all PWMs to 1 ms
@@ -153,9 +165,9 @@ int main()
     sendLoadSignal();
 
     /* Initialize speed/encoder ticker and interrupt */
-    //encoder.rise(&encoderRise);
     encoderTimer.start();
-    //speedPIDTicker.attach(&speedPIDController, 0.6f);
+    speedPIDTicker.attach(&speedPIDController, 0.6f);
+    loadSimulation.attach(&loadTicker, 1.0f);
 
     /* Initialize battery information ticker */
     batteryStats.attach(&calculateBatteryCurrent, circuitStatInterval);
@@ -166,7 +178,7 @@ int main()
     
     pc.printf("Initialized all variables\r\n");
 
-    while(1) {
+    while(loadTickerIndex < 9) {
         calculateTargetPulsewidth();
         updateCurrentMPH();
         float encoderVoltage = encoder.read() * 3.3;
@@ -177,34 +189,31 @@ int main()
             float tempFreq = 1 / timePassed;
             if(tempFreq < 800.0f) {
                 encoderFrequency = ((encoderFrequency * (readCount - 1)) + tempFreq) / readCount;
-                pc.printf("Frequency: %f\r\n", encoderFrequency);
-            } else {
-                pc.printf("Error\r\n");
-            }
+                //pc.printf("Frequency: %f\r\n", encoderFrequency);
+            } 
             encoderTimer.reset();
             readyToRead = 0;
         } else if(!readyToRead && encoderVoltage < 0.8) {
             readyToRead = 1;
         }
         
-        //pc.printf("printing");
-        
         //pc.printf("Encoder Voltage: %f\r\n", encoderVoltage);
-        /*
-        // Buck-Boost conditions based on battery current
-        if(currentBatteryCurrent < 0) {
-            buck.write(0.25f);
-        } else if(currentBatteryCurrent > 0.15f) {
-            boost.write(0.25f);
-        } else {
-            buck.write(0.0f);
-            boost.write(0.0f);
-        }
         
-        // Buck-Boost conditions based on load
-        if(!loadControl) {
-            buck.write(loadPulsewidth / 5);
+        /* Control System Conditions */
+        if(currentBatteryCurrent < 0) {
+            buckPWM.write(0.25f);
+            boostPWM.write(0.0f);
+        } else if(currentBatteryCurrent > 0.15f) {
+            buckPWM.write(0.0f);
+            boostPWM.write(0.25f);
+        } else {
+            // Load motor assisting the drive motor
+            if(loadControl) {
+                buckPWM.write(loadPulsewidth / 5);
+            } else {
+                buckPWM.write(0.0f);
+                boostPWM.write(0.0f);
+            }
         }
-        */
     }
 }
