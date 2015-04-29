@@ -19,6 +19,8 @@ Ticker loadSimulation;
 float loadPWMValues [9] = {0.0f, 0.1f, 0.1f, 0.1f, 0.0f, 0.1f, 0.1f, 0.1f, 0.0f}; // Pulsewidths for load motor
 int loadControlValues [9] = {0, 0, 0, 0, 0, 1, 1, 1, 1}; // 0 ==> Oppose drive motor | 1 ==> Assist load motor
 int loadTickerIndex;
+float loadInterval = 1.0f;
+float elevation;
 
 AnalogIn batteryVoltage(p15);
 AnalogIn batteryRefVoltage(p16);
@@ -160,6 +162,35 @@ void buckBoostZero() {
     boostLED = 0;
 }
 
+void updateElevation() {
+    float currentMPS = currentMPH / 60;
+    float currentFPS = currentMPS * 5280;
+    elevation += (currentFPS * loadInterval * loadPulsewidth);
+}
+
+void sendMatlabData() {
+    char superCapVoltageBuffer[20];
+    char superCapCurrentBuffer[20];
+    char batteryVoltageBuffer[20];
+    char batteryCurrentBuffer[20];
+    char elevationBuffer[20];
+    char dataPacketBuffer[110];
+
+    sprintf(&elevationBuffer, "%f", elevation);
+    sprintf(&superCapVoltageBuffer, " %f", currentSuperCapVoltage);
+    sprintf(&superCapCurrentBuffer, " %f", currentSuperCapCurrent);
+    sprintf(&batteryVoltageBuffer, " %f", currentBatteryVoltage);
+    sprintf(&batteryCurrentBuffer, " %f", currentBatteryCurrent);
+
+    dataPacketBuffer = strcpy(dataPacketBuffer, elevationBuffer);
+    dataPacketBuffer = strcat(dataPacketBuffer, superCapVoltageBuffer);
+    dataPacketBuffer = strcat(dataPacketBuffer, superCapCurrentBuffer);
+    dataPacketBuffer = strcat(dataPacketBuffer, batteryVoltageBuffer);
+    dataPacketBuffer = strcat(dataPacketBuffer, batteryCurrentBuffer);
+
+    pc.puts(dataPacketBuffer);
+}
+
 /*
  * *************** Main Function ***************
  */
@@ -191,7 +222,7 @@ int main()
     // Initialize speed/encoder ticker and interrupt */
     encoderTimer.start();
     speedPIDTicker.attach(&speedPIDController, 0.6f);
-    loadSimulation.attach(&loadTicker, 1.0f);
+    loadSimulation.attach(&loadTicker, loadInterval);
 
     // Initialize battery information ticker */
     batteryStats.attach(&calculateBatteryCurrent, circuitStatInterval);
@@ -199,6 +230,7 @@ int main()
     
     int readyToRead = 1;
     int readCount = 0;
+    elevation = 0.0f;
     
     pc.printf("Initialized all variables\r\n");
     buckLED = 1;
@@ -207,6 +239,8 @@ int main()
     while(1) {
         calculateTargetPulsewidth();
         updateCurrentMPH();
+        updateElevation();
+        sendMatlabData();
         float encoderVoltage = encoder.read() * 3.3;
         
         if(readyToRead && encoderVoltage > 2) { 
@@ -243,7 +277,7 @@ int main()
             }
             pc.printf("Boosting ==> More Current Needed");
         } else {
-            /*
+            
             // Load motor assisting the drive motor
             if(loadControl || currentMPH < 20 || currentMPH > 80) {
                 if(loadControl) {
@@ -261,7 +295,6 @@ int main()
             } else {
                 buckBoostZero();
             }
-            */
         }
     } 
 }
