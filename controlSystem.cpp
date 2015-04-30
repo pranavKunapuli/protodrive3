@@ -1,4 +1,5 @@
 #include "mbed.h"
+#include "string"
 
 /*
  * Motor Control Elements:
@@ -176,18 +177,19 @@ void sendMatlabData() {
     char elevationBuffer[20];
     char dataPacketBuffer[110];
 
-    sprintf(&elevationBuffer, "%f", elevation);
-    sprintf(&superCapVoltageBuffer, " %f", currentSuperCapVoltage);
-    sprintf(&superCapCurrentBuffer, " %f", currentSuperCapCurrent);
-    sprintf(&batteryVoltageBuffer, " %f", currentBatteryVoltage);
-    sprintf(&batteryCurrentBuffer, " %f", currentBatteryCurrent);
+    sprintf(elevationBuffer, "%f", elevation);
+    sprintf(superCapVoltageBuffer, " %f", currentSuperCapVoltage);
+    sprintf(superCapCurrentBuffer, " %f", currentSuperCapCurrent);
+    sprintf(batteryVoltageBuffer, " %f", currentBatteryVoltage);
+    sprintf(batteryCurrentBuffer, " %f", currentBatteryCurrent);
 
-    dataPacketBuffer = strcpy(dataPacketBuffer, elevationBuffer);
-    dataPacketBuffer = strcat(dataPacketBuffer, superCapVoltageBuffer);
-    dataPacketBuffer = strcat(dataPacketBuffer, superCapCurrentBuffer);
-    dataPacketBuffer = strcat(dataPacketBuffer, batteryVoltageBuffer);
-    dataPacketBuffer = strcat(dataPacketBuffer, batteryCurrentBuffer);
-
+    strcpy(dataPacketBuffer, elevationBuffer);
+    strcat(dataPacketBuffer, superCapVoltageBuffer);
+    strcat(dataPacketBuffer, superCapCurrentBuffer);
+    strcat(dataPacketBuffer, batteryVoltageBuffer);
+    strcat(dataPacketBuffer, batteryCurrentBuffer);
+    
+    //pc.printf("%s", dataPacketBuffer);
     pc.puts(dataPacketBuffer);
 }
 
@@ -249,7 +251,7 @@ int main()
             float tempFreq = 1 / timePassed;
             if(tempFreq < 800.0f) {
                 encoderFrequency = ((encoderFrequency * (readCount - 1)) + tempFreq) / readCount;
-                pc.printf("Frequency: %f\r\n", encoderFrequency);
+                //pc.printf("Frequency: %f\r\n", encoderFrequency);
             } 
             encoderTimer.reset();
             readyToRead = 0;
@@ -262,7 +264,7 @@ int main()
         // Control System Conditions
         if(currentBatteryCurrent < 0) {
             sendBuckSignal(0.25f);
-            pc.printf("Bucking ==> Reversed Current");
+            pc.printf("Bucking ==> Reversed Current\r\n");
         } else if(currentBatteryCurrent > 0.10f) {
             if(currentBatteryCurrent > 0.19f) {
                 sendBoostSignal(0.5f);
@@ -275,22 +277,22 @@ int main()
             } else if(currentBatteryCurrent > 0.10f) {
                 sendBoostSignal(0.1f);
             }
-            pc.printf("Boosting ==> More Current Needed");
+            pc.printf("Boosting ==> More Current Needed\r\n");
         } else {
             
             // Load motor assisting the drive motor
             if(loadControl || currentMPH < 20 || currentMPH > 80) {
                 if(loadControl) {
                     sendBuckSignal(loadPulsewidth / 5);
-                    pc.printf("Bucking ==> Downhill");
+                    pc.printf("Bucking ==> Downhill\r\n");
                 } 
                 
                 if(currentMPH > 80.0f && currentSuperCapVoltage > 14) {
                     sendBoostSignal(0.25f);
-                    pc.printf("Boosting ==> Draining Super Cap");
+                    pc.printf("Boosting ==> Draining Super Cap\r\n");
                 } else if(currentMPH < 20 && currentSuperCapVoltage < 16) {
                     sendBuckSignal(0.25f);
-                    pc.printf("Bucking ==> Charging Super Cap");
+                    pc.printf("Bucking ==> Charging Super Cap\r\n");
                 }
             } else {
                 buckBoostZero();
