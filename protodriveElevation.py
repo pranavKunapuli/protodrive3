@@ -9,9 +9,13 @@ def formatAddressData (raw_address):
 geocodeURL = "http://maps.googleapis.com/maps/api/geocode/json?address="
 elevationURL = "https://maps.googleapis.com/maps/api/elevation/json?"
 
-address = "\"" + raw_input("Enter your address: ") + "\""
-city = "\"" + raw_input("Enter your city: ") + "\""
-state = "\"" + raw_input("Enter your state (two-lettered format): ") + "\""
+#address = "\"" + raw_input("Enter your address: ") + "\""
+#city = "\"" + raw_input("Enter your city: ") + "\""
+#state = "\"" + raw_input("Enter your state (two-lettered format): ") + "\""
+
+address = "101 South 39th Street"
+city = "Philadelphia"
+state = "PA"
 
 formattedAddress = formatAddressData(address)
 formattedCity = ",+" + formatAddressData(city)
@@ -33,4 +37,6 @@ elevationJSON = json.loads(elevationResponse.read())
 elevation = elevationJSON["results"][0]["elevation"]
 
 mbed = serial.Serial("/dev/tty.usbmodem1412", 9600)
-mbed.write(elevation)
+mbed.write(str(elevation))
+mbed.close()
+print "Done"
