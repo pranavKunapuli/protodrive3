@@ -9,6 +9,7 @@
 PwmOut driveMotor(p24);
 PwmOut loadMotor(p23);
 DigitalOut loadControl(p5);
+DigitalOut superCapCharger(p10);
 AnalogIn encoder(p20);
 Timer encoderTimer;
 float tickerInterval = 0.025f;
@@ -18,7 +19,9 @@ float accelerationFactor = 0.4f;
 Ticker speedPIDTicker;
 Ticker loadSimulation;
 float loadPWMValues [9] = {0.0f, 0.1f, 0.1f, 0.1f, 0.0f, 0.1f, 0.1f, 0.1f, 0.0f}; // Pulsewidths for load motor
-int loadControlValues [9] = {0, 0, 0, 0, 0, 1, 1, 1, 1}; // 0 ==> Oppose drive motor | 1 ==> Assist load motor
+int loadControlValues[9] = {0, 0, 0, 0, 1, 1, 1, 1, 1};
+float elevations[9] = {0, 10, 20, 30, 30, 30, 20, 10, 0};
+float elevations2[9] = {0, 31, 0, 20, 30, 75, 30, 20, 0};
 int loadTickerIndex;
 float loadInterval = 1.0f;
 float elevation;
@@ -52,6 +55,8 @@ float currentSuperCapCurrent;
 
 Serial pc(USBTX, USBRX);
 
+int sim1;
+
 void setBatteryVoltage() {
     currentBatteryVoltage = batteryRefVoltage.read() * 3.3f * 11;
 }
@@ -59,7 +64,7 @@ void setBatteryVoltage() {
 void calculateBatteryCurrent() {
     setBatteryVoltage();
     currentBatteryCurrent = (currentBatteryVoltage - 
-        (batteryVoltage.read() * 3.3f * 11)) / 6.9f;
+        (batteryVoltage.read() * 3.3f * 11)) / 6.953f;
 }
 
 void setSuperCapVoltage() {
@@ -69,7 +74,7 @@ void setSuperCapVoltage() {
 void calculateSuperCapCurrent() {
     setSuperCapVoltage();
     currentSuperCapCurrent = (currentSuperCapVoltage -
-        (superCapVoltage.read() * 3.3f * 11)) / 6.9;
+        (superCapVoltage.read() * 3.3f * 11)) / 6.953f;
 }
 
 /*
@@ -80,8 +85,8 @@ void encoderRise() {
     float timePassed = encoderTimer.read();
     encoderFrequency = 1 / timePassed;
     if(encoderFrequency < 1000) {
-        pc.printf("Time Passed: %f\r\n", timePassed);
-        pc.printf("Frequency: %f\r\n", encoderFrequency);
+        //pc.printf("Time Passed: %f\r\n", timePassed);
+        //pc.printf("Frequency: %f\r\n", encoderFrequency);
     }
     encoderTimer.reset();
 }
@@ -108,8 +113,8 @@ void calculateTargetPulsewidth() {
 }
 
 void updateCurrentMPH() {
-    //float frequency = 1129 * drivePulsewidth;
-    float inchesPerMinute = encoderFrequency * wheelCircumfrence;
+    float frequency = drivePulsewidth * 1129;
+    float inchesPerMinute = frequency * wheelCircumfrence;
     float inchesPerHour = inchesPerMinute * 60;
     currentMPH = ((inchesPerHour / 12) / 5280);
 }
@@ -136,10 +141,10 @@ void speedPIDController() {
     
     sendDriveSignal(); // Push the changed pulsewidth to the motor
     updateCurrentMPH();
-    pc.printf("Current MPH: %f\r\n", currentMPH);
-    pc.printf("Target MPH: %f\r\n", targetMPH);
-    pc.printf("Target PW: %f\r\n", targetPulsewidth);
-    pc.printf("Current PW: %f\r\n", drivePulsewidth);
+    //pc.printf("Current MPH: %f\r\n", currentMPH);
+    //pc.printf("Target MPH: %f\r\n", targetMPH);
+    //pc.printf("Target PW: %f\r\n", targetPulsewidth);
+    //pc.printf("Current PW: %f\r\n", drivePulsewidth);
 }
 
 void sendBuckSignal(float pulsewidth) {
@@ -147,6 +152,7 @@ void sendBuckSignal(float pulsewidth) {
     boostPWM.write(0.00f);
     buckLED = 1;
     boostLED = 0;
+    superCapCharge = 1;
 }
 
 void sendBoostSignal(float pulsewidth) {
@@ -154,6 +160,7 @@ void sendBoostSignal(float pulsewidth) {
     boostPWM.write(pulsewidth);
     buckLED = 0;
     boostLED = 1;
+    superCapCharge = 0;
 }
 
 void buckBoostZero() {
@@ -164,33 +171,37 @@ void buckBoostZero() {
 }
 
 void updateElevation() {
+    /*
     float currentMPS = currentMPH / 60;
     float currentFPS = currentMPS * 5280;
-    elevation += (currentFPS * loadInterval * loadPulsewidth);
+    float elevationChange = (currentFPS * loadInterval * loadPulsewidth);
+    if(loadControl) { elevationChange = elevationChange * -1; } 
+    elevation += elevationChange*/
+    if(sim1) {
+        elevation = elevations[loadTickerIndex];
+    } else {
+        elevation = elevations2[loadTickerIndex];
+    }
 }
 
 void sendMatlabData() {
     char superCapVoltageBuffer[20];
-    char superCapCurrentBuffer[20];
+    char currentMPHBuffer[20];
     char batteryVoltageBuffer[20];
-    char batteryCurrentBuffer[20];
     char elevationBuffer[20];
-    char dataPacketBuffer[110];
+    char dataPacketBuffer[100];
 
     sprintf(elevationBuffer, "%f", elevation);
     sprintf(superCapVoltageBuffer, " %f", currentSuperCapVoltage);
-    sprintf(superCapCurrentBuffer, " %f", currentSuperCapCurrent);
+    sprintf(currentMPHBuffer, " %f", currentMPH);
     sprintf(batteryVoltageBuffer, " %f", currentBatteryVoltage);
-    sprintf(batteryCurrentBuffer, " %f", currentBatteryCurrent);
 
     strcpy(dataPacketBuffer, elevationBuffer);
     strcat(dataPacketBuffer, superCapVoltageBuffer);
-    strcat(dataPacketBuffer, superCapCurrentBuffer);
+    strcat(dataPacketBuffer, currentMPHBuffer);
     strcat(dataPacketBuffer, batteryVoltageBuffer);
-    strcat(dataPacketBuffer, batteryCurrentBuffer);
     
-    //pc.printf("%s", dataPacketBuffer);
-    pc.puts(dataPacketBuffer);
+    pc.printf("%s\n", dataPacketBuffer);
 }
 
 /*
@@ -203,16 +214,18 @@ int main()
     // Initialize global variables */
     encoderHighCount = 0; // How fast the wheels are spinning
     encoderFrequency = 0;
-    currentMPH = 86;
-    targetMPH = 86;
+    currentMPH = 0;
+    targetMPH = 60;
     targetPulsewidth = 0;
     currentBatteryVoltage = 0;
     currentSuperCapVoltage = 0;
     currentBatteryCurrent = 0;
     currentSuperCapCurrent = 0;
-    drivePulsewidth = 0.5f;
-    loadPulsewidth = 0.1f;
+    drivePulsewidth = 0.0f;
+    loadPulsewidth = 0.50f;
     loadTickerIndex = 0;
+    elevation = 0;
+    sim1 = 0;
    
     // Initialize PWM global period and individual pulsewidths */
     boostPWM.period(0.001f); // Set period for all PWMs to 1 ms
@@ -235,10 +248,10 @@ int main()
     elevation = 0.0f;
     
     pc.printf("Initialized all variables\r\n");
-    buckLED = 1;
+    buckLED = 0;
     boostLED = 0;
 
-    while(1) {
+    while(loadTickerIndex < 9) {
         calculateTargetPulsewidth();
         updateCurrentMPH();
         updateElevation();
@@ -261,42 +274,57 @@ int main()
         
         //pc.printf("Encoder Voltage: %f\r\n", encoderVoltage);
         
+        if(sim1) {
+            if(loadTickerIndex > 1 && loadTickerIndex < 5) {
+                sendBoostSignal(0.25f);
+            } else if(loadTickerIndex > 5) {
+                sendBuckSignal(0.25f);
+            }
+        } else {
+            if(loadTickerIndex > 3 && loadTickerIndex < 5) {
+                sendBoostSignal(0.25f);
+            } else if(loadTickerIndex > 5) {
+                sendBuckSignal(0.25f);
+            }
+        }
+        
+        /*
         // Control System Conditions
         if(currentBatteryCurrent < 0) {
             sendBuckSignal(0.25f);
-            pc.printf("Bucking ==> Reversed Current\r\n");
+            //pc.printf("Bucking ==> Reversed Current\r\n");
         } else if(currentBatteryCurrent > 0.10f) {
-            if(currentBatteryCurrent > 0.19f) {
+            if(currentBatteryCurrent > 0.20f) {
                 sendBoostSignal(0.5f);
-            } else if(currentBatteryCurrent > 0.1675f) {
+            } else if(currentBatteryCurrent > 0.1875f) {
                 sendBoostSignal(0.4f);
-            } else if(currentBatteryCurrent > 0.145f) {
+            } else if(currentBatteryCurrent > 0.175f) {
                 sendBoostSignal(0.3f);
-            } else if(currentBatteryCurrent > 0.1225f) {
+            } else if(currentBatteryCurrent > 0.1625f) {
                 sendBoostSignal(0.2f);
-            } else if(currentBatteryCurrent > 0.10f) {
+            } else if(currentBatteryCurrent > 0.15f) {
                 sendBoostSignal(0.1f);
             }
-            pc.printf("Boosting ==> More Current Needed\r\n");
+            //pc.printf("Boosting ==> More Current Needed\r\n");
         } else {
             
             // Load motor assisting the drive motor
             if(loadControl || currentMPH < 20 || currentMPH > 80) {
                 if(loadControl) {
-                    sendBuckSignal(loadPulsewidth / 5);
-                    pc.printf("Bucking ==> Downhill\r\n");
+                    sendBuckSignal(loadPulsewidth / 10);
+                    //pc.printf("Bucking ==> Downhill\r\n");
                 } 
                 
                 if(currentMPH > 80.0f && currentSuperCapVoltage > 14) {
                     sendBoostSignal(0.25f);
-                    pc.printf("Boosting ==> Draining Super Cap\r\n");
+                    //pc.printf("Boosting ==> Draining Super Cap\r\n");
                 } else if(currentMPH < 20 && currentSuperCapVoltage < 16) {
                     sendBuckSignal(0.25f);
-                    pc.printf("Bucking ==> Charging Super Cap\r\n");
+                    //pc.printf("Bucking ==> Charging Super Cap\r\n");
                 }
             } else {
                 buckBoostZero();
             }
-        }
+        } */
     } 
 }
