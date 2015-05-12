@@ -9,7 +9,7 @@
 PwmOut driveMotor(p24);
 PwmOut loadMotor(p23);
 DigitalOut loadControl(p5);
-DigitalOut superCapCharger(p10);
+DigitalOut superCapCharge(p10);
 AnalogIn encoder(p20);
 Timer encoderTimer;
 float tickerInterval = 0.025f;
@@ -18,10 +18,10 @@ float loadPulsewidth;
 float accelerationFactor = 0.4f;
 Ticker speedPIDTicker;
 Ticker loadSimulation;
-float loadPWMValues [9] = {0.0f, 0.1f, 0.1f, 0.1f, 0.0f, 0.1f, 0.1f, 0.1f, 0.0f}; // Pulsewidths for load motor
-int loadControlValues[9] = {0, 0, 0, 0, 1, 1, 1, 1, 1};
-float elevations[9] = {0, 10, 20, 30, 30, 30, 20, 10, 0};
-float elevations2[9] = {0, 31, 0, 20, 30, 75, 30, 20, 0};
+float loadPWMValues [13] = {0.0f, 0.1f, 0.1f, 0.1f, 0.0f, 0.1f, 0.1f, 0.1f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}; // Pulsewidths for load motor
+int loadControlValues[13] = {0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1};
+float elevations[13] = {0, 10, 20, 30, 40, 50, 50, 50, 30, 30, 20, 10, 0};
+float elevations2[13] = {0, 15, 31, 15, 0, 10, 20, 30, 75, 30, 20, 10, 0};
 int loadTickerIndex;
 float loadInterval = 1.0f;
 float elevation;
@@ -168,6 +168,7 @@ void buckBoostZero() {
     boostPWM.write(0.0f);
     buckLED = 0;
     boostLED = 0;
+    superCapCharge = 0;
 }
 
 void updateElevation() {
@@ -214,22 +215,22 @@ int main()
     // Initialize global variables */
     encoderHighCount = 0; // How fast the wheels are spinning
     encoderFrequency = 0;
-    currentMPH = 0;
-    targetMPH = 60;
+    currentMPH = 86;
+    targetMPH = 86;
     targetPulsewidth = 0;
     currentBatteryVoltage = 0;
     currentSuperCapVoltage = 0;
     currentBatteryCurrent = 0;
     currentSuperCapCurrent = 0;
-    drivePulsewidth = 0.0f;
-    loadPulsewidth = 0.50f;
+    drivePulsewidth = 0.50f;
+    loadPulsewidth = 0.00f;
     loadTickerIndex = 0;
     elevation = 0;
-    sim1 = 0;
+    sim1 = 1;
    
     // Initialize PWM global period and individual pulsewidths */
     boostPWM.period(0.001f); // Set period for all PWMs to 1 ms
-    boostPWM.write(0.00f); // Initialize to low
+    boostPWM.write(0.25f);
     buckPWM.write(0.00f); // Initialize to low
     sendDriveSignal();
     sendLoadSignal();
@@ -249,9 +250,9 @@ int main()
     
     pc.printf("Initialized all variables\r\n");
     buckLED = 0;
-    boostLED = 0;
+    boostLED = 1;
 
-    while(loadTickerIndex < 9) {
+    while(1) {
         calculateTargetPulsewidth();
         updateCurrentMPH();
         updateElevation();
@@ -275,20 +276,26 @@ int main()
         //pc.printf("Encoder Voltage: %f\r\n", encoderVoltage);
         
         if(sim1) {
-            if(loadTickerIndex > 1 && loadTickerIndex < 5) {
+            if(loadTickerIndex > 1 && loadTickerIndex < 6) {
                 sendBoostSignal(0.25f);
-            } else if(loadTickerIndex > 5) {
+            } else if(loadTickerIndex > 6) {
                 sendBuckSignal(0.25f);
+            } else if(loadTickerIndex >= 11) {
+                buckBoostZero();
             }
         } else {
-            if(loadTickerIndex > 3 && loadTickerIndex < 5) {
+            if(loadTickerIndex > 5 && loadTickerIndex < 8) {
                 sendBoostSignal(0.25f);
-            } else if(loadTickerIndex > 5) {
-                sendBuckSignal(0.25f);
-            }
+            } else if(loadTickerIndex > 8) {
+                if(loadTickerIndex > 11) { 
+                    buckBoostZero();
+                } else {
+                    sendBuckSignal(0.25f);
+                {
+            } 
         }
         
-        /*
+        
         // Control System Conditions
         if(currentBatteryCurrent < 0) {
             sendBuckSignal(0.25f);
@@ -325,6 +332,6 @@ int main()
             } else {
                 buckBoostZero();
             }
-        } */
+        }
     } 
 }
